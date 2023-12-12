@@ -1,0 +1,861 @@
+---
+title: "Exercise: Phenology Modelling"
+author: "Applied Geodata Science 2 (2023)"
+date: "Tino Schneidewind"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(phenocamr)
+library(geodata)
+library(terra)
+library(dplyr)
+library(here)
+library(ggplot2)
+library(patchwork)
+library(GenSA)
+library(BayesianTools)
+library(daymetr)
+library(raster)
+library(MODISTools)
+library(leaflet)
+library(tidyterra)
+
+```
+
+## A short introduction:
+
+Phenology is influenced by seasonal and interannual variability in climate. In the age of climate change, we observe changes in biological life cycles with consequences for ecosystem stability and diversity. 
+In this exercise, we modeled the growing degree days (GDD), which describe the temperature accumulation in spring until leaf unfolding. For this, we worked through ["Handful of Pixels" chapter 6](https://geco-bern.github.io/handfull_of_pixels/phenology_modelling.html).
+
+As data, we used PhenoCam data, which we accessed using the [{phenocamr}](https://bluegreen-labs.github.io/phenocamr/) [R package](https://bluegreen-labs.github.io/phenocamr/). We chose the site "harvard" in north eastern USA. The data was downloaded according to chapter 6.2. The used model for GDD and the model optimisation method is described in chapter 6.2. After optimising the model, we have values for the **temperature threshold (2.811523)** and the **number of accumulation days (228.27844)**.
+
+
+```{r harvard_data, echo=FALSE, message=FALSE}
+phenocamr::download_phenocam(
+  site = "harvard$",
+  veg_type = "DB",
+  roi_id = "1000",
+  daymet = TRUE,
+  phenophase = TRUE,
+  trim = 2022,
+  out_dir = tempdir()
+)
+
+harvard_phenocam_data <- readr::read_csv(
+  file.path(tempdir(), "harvard_DB_1000_3day.csv"), 
+  comment = "#"
+)
+```
+
+
+```{r harvard_processing, echo=FALSE, message=FALSE}
+harvard_phenology <- readr::read_csv(
+  file.path(
+    tempdir(),
+    "harvard_DB_1000_3day_transition_dates.csv"
+    ),
+  comment = "#"
+) |>
+  dplyr::filter(
+    direction == "rising",
+    gcc_value == "gcc_90"
+  )
+
+harvard_temp <- harvard_phenocam_data |>
+  group_by(year) |>
+  dplyr::mutate(
+    tmean = (tmax..deg.c. + tmin..deg.c.)/2
+  ) |> 
+  dplyr::mutate(
+    date = as.Date(date),
+    gdd = cumsum(ifelse(tmean >= 5, tmean - 5, 0))
+  ) |>
+  dplyr::select(
+    date,
+    year,
+    tmean,
+    gdd
+  ) |>
+  ungroup()
+
+harvard_phenology <- harvard_phenology |>
+  mutate(
+    doy = as.numeric(format(as.Date(transition_25),"%j")),
+    year = as.numeric(format(as.Date(transition_25),"%Y"))
+  ) |>
+  dplyr::select(
+    year,
+    doy,
+    transition_25,
+    threshold_25
+  )
+
+harvard_temp <- harvard_phenocam_data |>
+  group_by(year) |>
+  dplyr::mutate(
+    tmean = (tmax..deg.c. + tmin..deg.c.)/2
+  ) |> 
+  dplyr::mutate(
+    date = as.Date(date),
+    gdd = cumsum(ifelse(tmean >= 5, tmean - 5, 0))
+  ) |>
+  dplyr::select(
+    date,
+    year,
+    tmean,
+    gdd
+  ) |>
+  ungroup()
+
+harvard_phenology <- harvard_phenology |>
+  mutate(
+    doy = as.numeric(format(as.Date(transition_25),"%j")),
+    year = as.numeric(format(as.Date(transition_25),"%Y"))
+  ) |>
+  dplyr::select(
+    year,
+    doy,
+    transition_25,
+    threshold_25
+  )
+```
+
+```{r models, echo=FALSE}
+source("../functions/phenology_models.R")
+```
+
+```{r model_optimisation, echo=FALSE, message=FALSE}
+
+# starting model parameters
+par = c(0, 130)
+lower <- c(-10,0)
+upper <- c(45,500)
+
+data_harvard <- list(
+  drivers = harvard_temp,
+  validation = harvard_phenology
+)
+
+optim_par_harvard = GenSA::GenSA(
+  par = par,
+  fn = rmse_gdd,
+  lower = lower,
+  upper = upper,
+  control = list(
+    max.call = 4000
+  ),
+  data = data_harvard
+)$par
+
+```
+
+The modeled leaf unfolding days (DOY) compared to the measured ones look like this:
+```{r modell_all_years, echo=FALSE}
+predictions_harvard <- harvard_temp |>
+  group_by(year) |>
+  summarize(
+    prediction = gdd_model(
+      temp = tmean,
+      par = optim_par_harvard
+    )  
+  )
+
+print(predictions_harvard)
+
+lm(predictions_harvard$prediction ~ harvard_phenology$doy)$coeff
+# summary(lm(predictions_harvard$prediction ~ harvard_phenology$doy))
+# join predicted with observed data
+validation <- left_join(predictions_harvard, harvard_phenology)
+
+ggplot(validation) +
+  geom_smooth(
+    aes(
+      doy,
+      prediction
+    ),
+    colour = "brown2",
+    method = "lm"
+  ) +
+  geom_point(
+    aes(
+      doy,
+      prediction
+    )
+  ) +
+  geom_abline(
+    intercept=0, 
+    slope=1, 
+    linetype="dotted"
+    ) +
+  labs(
+    x = "Observed leaf-out date (DOY)",
+    y = "Predicted leaf-out date (DOY)",
+    title = "Agreement of predictions and observations for harvard"
+  ) +
+  theme_bw()  +
+  theme(
+    legend.position = "none"
+  )
+```
+
+
+The model and the observed leaf out days had visually had a similar tendency, however, the slope between both was only 0.74 instead of the optimal of 1. The linear model of both datasets was significant with p = 0.005, with an  Rsquared of 0.46.
+
+
+We scaled the model spatially for the year 2010 to compare it later on.
+
+```{r harvard_spatial, echo=FALSE, message=FALSE, results="hide"}
+prediction_harvard_10 <- harvard_temp |>
+  dplyr::filter(
+    year == 2010
+  ) |>
+  group_by(year) |>
+  summarize(
+    pred = gdd_model(
+      temp = tmean,
+      par = optim_par_harvard
+      )  
+  )
+
+# Download daily data
+daymetr::download_daymet_tiles(
+  tiles = 11935,
+  start = 2010,
+  end = 2010,
+  param = c("tmin","tmax"),
+  path = paste0(here::here(), "/data-raw/"),
+  silent = TRUE
+  )
+
+# calculate the daily mean values
+r <- daymetr::daymet_grid_tmean(
+  path = paste0(here::here(), "/data-raw/"),
+  product = 11935,
+  year = 2010,
+  internal = TRUE
+)
+
+# reproject to lat lon
+r <- terra::project(
+  r,
+  "+init=epsg:4326"
+)
+
+# subset to first 180 days
+ma_nh_temp <- terra::subset(
+  r,
+  1:180
+)
+
+predicted_phenology_harvard <- terra::app(
+  ma_nh_temp,
+  fun = gdd_model,
+  par = optim_par_harvard
+)
+```
+
+```{r scale harvard, echo=FALSE, message=FALSE}
+pal <- colorNumeric(
+  "magma",
+  values(predicted_phenology_harvard),
+  na.color = "transparent"
+  )
+
+leaflet() |> 
+  addProviderTiles(providers$Esri.WorldImagery, group = "World Imagery") |>
+  addProviderTiles(providers$Esri.WorldTopoMap, group = "World Topo") |>
+  addRasterImage(
+    predicted_phenology_harvard,
+    colors = pal,
+    opacity = 0.8,
+    group = "Phenology model results"
+    ) |>
+  addLayersControl(
+    baseGroups = c("World Imagery","World Topo"),
+    position = "topleft",
+    options = layersControlOptions(collapsed = FALSE),
+    overlayGroups = c("Phenology model results")
+    ) |>
+  addLegend(
+    pal = pal,
+    values = values(predicted_phenology_harvard),
+    title = "DOY")
+```
+<br>
+
+
+## Exercises
+### Model Optimization
+*Task: How can you improve the model used to regionally scale the results in Chapter 6? Provide at least three ways to improve the model used. Implement at least one of these methods.*
+
+Multiple methods are possible to modify the used model. 
+1. One could add data **additional training data** in order to improve the model generelisability. I will implement this method further down in this report. 
+2. It would be possible to improve the model by **adding another parameter** such as radiation, humidity or soil propoerties. This would make the model more sensitive to non temperature abiotic factors.
+3. Another method to improve the model could be **altering the loss function**, in our case rsme, to a more suitable alternative. 
+4. Of course, we could implement **machine learning** to improve our predictions, however, this would be considered a change of model and not an optimization
+
+<br>
+
+
+
+#### 1. Implementation of Optimization
+In order to ensure some comparibility between the new site and the harvard site, I chose a site nearby. The **worchester** site (lat: 42.2697, lon: -71.8428) is approximately 40 km southeast of the harvard site. Compared to harvard (340 m above sea level), worchester has less elevation (185 m above sea level). This site is also part of the PhenCam network. Both datasets were given an ID, so that we are able to distinguish between the two sites in the modeling process.  
+
+```{r worchester, echo=FALSE, message=FALSE}
+phenocamr::download_phenocam(
+  site = "worcester",
+  veg_type = "DB",
+  roi_id = "1000",
+  daymet = TRUE,
+  phenophase = TRUE,
+  trim = 2022,
+  out_dir = tempdir()
+)
+
+worcester_phenocam_data <- readr::read_csv(
+  file.path(tempdir(), "worcester_DB_1000_3day.csv"), 
+  comment = "#"
+)
+```
+
+
+```{r worchester_processing, echo=FALSE, message=FALSE}
+worcester_phenology <- readr::read_csv(
+  file.path(
+    tempdir(),
+    "worcester_DB_1000_3day_transition_dates.csv"
+  ),
+  comment = "#"
+) |>
+  dplyr::filter(
+    direction == "rising",
+    gcc_value == "gcc_90"
+  )
+
+worcester_temp <- worcester_phenocam_data |>
+  group_by(year) |>
+  dplyr::mutate(
+    tmean = (tmax..deg.c. + tmin..deg.c.)/2
+  ) |> 
+  dplyr::mutate(
+    date = as.Date(date),
+    gdd = cumsum(ifelse(tmean >= 5, tmean - 5, 0))
+  ) |>
+  dplyr::select(
+    date,
+    year,
+    tmean,
+    gdd
+  ) |>
+  ungroup()
+
+worcester_phenology <- worcester_phenology |>
+  mutate(
+    doy = as.numeric(format(as.Date(transition_25),"%j")),
+    year = as.numeric(format(as.Date(transition_25),"%Y"))
+  ) |>
+  dplyr::select(
+    year,
+    doy,
+    transition_25,
+    threshold_25
+  )
+
+worcester_temp <- worcester_phenocam_data |>
+  group_by(year) |>
+  dplyr::mutate(
+    tmean = (tmax..deg.c. + tmin..deg.c.)/2
+  ) |> 
+  dplyr::mutate(
+    date = as.Date(date),
+    gdd = cumsum(ifelse(tmean >= 5, tmean - 5, 0))
+  ) |>
+  dplyr::select(
+    date,
+    year,
+    tmean,
+    gdd
+  ) |>
+  ungroup()
+
+worcester_phenology <- worcester_phenology |>
+  mutate(
+    doy = as.numeric(format(as.Date(transition_25),"%j")),
+    year = as.numeric(format(as.Date(transition_25),"%Y"))
+  ) |>
+  select(
+    year,
+    doy,
+    transition_25,
+    threshold_25
+  )
+
+# Site ID
+worcester_temp$ID <- "worcester"
+harvard_temp$ID <- "harvard"
+worcester_phenology$ID <- "worcester"
+harvard_phenology$ID <- "harvard"
+```
+
+```{r optimizationdoubble, echo=FALSE, message=FALSE}
+data_ha_wo <- list(
+  drivers = rbind(worcester_temp, harvard_temp),
+  validation = rbind(worcester_phenology, harvard_phenology)
+)
+
+optim_par_ha_wo = GenSA::GenSA(
+  par = par,
+  fn = rmse_gdd,
+  lower = lower,
+  upper = upper,
+  control = list(
+    max.call = 4000
+  ),
+  data = data_ha_wo
+)$par
+
+predictions_ha_wo <- rbind(worcester_temp, harvard_temp) |>
+  group_by(year) |>
+  summarize(
+    prediction = gdd_model(
+      temp = tmean,
+      par = optim_par_ha_wo
+    )  
+  )
+
+```
+
+When using both datasets as input, the optimization routine returned different optimal parameters compared to before. The **temperature threshold changed to 5.861427** and the **number of accumulation days to 143.048134**. The optimal parameters changed significantly due to the change in input data. I ran the new model again for all years and got the following scatterplot of my new predictions and the observed leaef unfolding days of harvard.
+
+In this plot you can see, that my improved model has pretty good alignement with the validation data. However, there is the clear outlier, which was predicted in 2013. This outlier did not appear before we adjusted the model by adding the worchester data. The slope of the linear model improved up to 0.82. However, Rquared is now only 0.1 and p = 0.23. The significance was likely lost due to the outlier. 
+
+```{r modworchester, echo=FALSE}
+print(predictions_ha_wo)
+
+lm(predictions_ha_wo$prediction ~ harvard_phenology$doy)$coeff
+# summary(lm(predictions_ha_wo$prediction ~ harvard_phenology$doy))
+
+
+validation <- left_join(predictions_ha_wo, harvard_phenology)
+
+ggplot(validation) +
+  geom_smooth(
+    aes(
+      doy,
+      prediction
+    ),
+    colour = "brown2",
+    method = "lm"
+  ) +
+  geom_point(
+    aes(
+      doy,
+      prediction
+    )
+  ) +
+  geom_abline(
+    intercept=0, 
+    slope=1, 
+    linetype="dotted"
+  ) +
+  labs(
+    x = "Observed leaf-out date (DOY)",
+    y = "Predicted leaf-out date (DOY)",
+    title = "Agreement of predictions (adjusted) and observations for harvard"
+  ) +
+  theme_bw()  +
+  theme(
+    legend.position = "none"
+  )
+
+```
+
+Again, I spatially scaled the model with the new parameters for the year 2010. When comparing this new spatial model to the previous one, it is clear that we reach higher values for DOY. The general pattern is similar with the highest values in the upper left corner and the lowest in the bottom right corner. There is a noticeable change in pattern visible in the changes from purple to yellow and dark purple to purple. This indicates that the new values did not simply increase linearly, but that the change in optimal parameters also influenced the small scale local gradients of the DOY. 
+
+```{r harvard_wor_spatial, echo=FALSE, message=FALSE}
+prediction_ha_wo_10 <- rbind(worcester_temp, harvard_temp) |>
+  dplyr::filter(
+    year == 2010
+  ) |>
+  group_by(year) |>
+  summarize(
+    pred = gdd_model(
+      temp = tmean,
+      par = optim_par_ha_wo
+      )  
+  )
+
+
+predicted_phenology_ha_wo <- terra::app(
+  ma_nh_temp,
+  fun = gdd_model,
+  par = optim_par_ha_wo
+)
+```
+
+```{r scale harvard_wor, echo=FALSE, message=FALSE}
+pal <- colorNumeric(
+  "magma",
+  values(predicted_phenology_ha_wo),
+  na.color = "transparent"
+  )
+
+leaflet() |> 
+  addProviderTiles(providers$Esri.WorldImagery, group = "World Imagery") |>
+  addProviderTiles(providers$Esri.WorldTopoMap, group = "World Topo") |>
+  addRasterImage(
+    predicted_phenology_ha_wo,
+    colors = pal,
+    opacity = 0.8,
+    group = "Phenology model results"
+    ) |>
+  addLayersControl(
+    baseGroups = c("World Imagery","World Topo"),
+    position = "topleft",
+    options = layersControlOptions(collapsed = FALSE),
+    overlayGroups = c("Phenology model results")
+    ) |>
+  addLegend(
+    pal = pal,
+    values = values(predicted_phenology_ha_wo),
+    title = "DOY")
+```
+
+<br>
+
+
+
+
+
+
+
+
+
+
+### 2. Statistical Comparison to MODIS Data 
+*Task: Statistically compare the results with the MODIS MCD12Q2 phenology product: compare the data spatially, describe why you might or might not see the same patterns, consider that 2010 was a ‘special’ year for the north east of the US.*
+
+In order to compare our results from the modified model with the MODIS MCD12Q2 phenology product, we needed to download it first. First, I downloaded the data from MODIS for the harvard site, and spatially averaged the yearly leaf out dates of the 20km^2 raster to get values, that can be compared to our predicted values. 
+
+<br>
+
+#### Comparison over all years
+
+```{r load_modis_harvard, echo=FALSE}
+phenology <- MODISTools::mt_subset(
+  product = "MCD12Q2",
+  lat = 42.5378,
+  lon = -72.1715,
+  band = "Greenup.Num_Modes_01",
+  start = "2008-01-01",
+  end = "2022-12-31",
+  km_lr = 20,
+  km_ab = 20,
+  site_name = "swiss",
+  internal = TRUE,
+  progress = FALSE
+)
+```
+
+```{r modis_harvard_processing, echo=FALSE}
+phenology <- phenology |>
+  mutate(
+    value = ifelse(value > 32656, NA, value),
+    value = as.numeric(format(as.Date("1970-01-01") + value, "%j")),
+    value = ifelse (value < 200, value, NA)
+  )
+phenology_raster <- MODISTools::mt_to_terra(
+  phenology,
+  reproject = TRUE
+)
+
+phenology_filtered <- phenology |>
+  dplyr::select(
+    value,
+    calendar_date
+  ) |>
+  mutate(
+    calendar_date = format(as.Date(calendar_date), format = "%Y")
+  ) |>
+  group_by(calendar_date) |>
+  summarize(
+    pheno_mean = mean(value, na.rm=T)
+  )
+```
+
+As we included two sites for our predicition-model, I chose to include data from the other site as well, and calculate an average between the two MODIS data sets. As both sites are further appart than the MODIS raster left to right, this adds new data. We are able to compare both data sets, because we can assume a normal distribution of the yearly mean values, due to the central limit theorem. 
+
+When comparing the yearly averages of MODIS with the predictions of my adjusted model visually, there seems to be a linear relationship between observations and predictions. The slope however ist only 0.48 with an intercept if 72. It is possible, that the model is missing a parameter which could account for that overall shift. This comparison as a linear model is again not significant. The T.Test gives a p-value of 0.0001, consequently we can assume that both of our samples originate from the same population. Excluding the outlier from 2013 of the predicted values from the statistical analysis does not significantly improve any test outcome. 
+```{r load_modis_worchester, echo=FALSE}
+phenology <- MODISTools::mt_subset(
+  product = "MCD12Q2",
+  lat = 42.2697,
+  lon = -71.8428,
+  band = "Greenup.Num_Modes_01",
+  start = "2008-01-01",
+  end = "2022-12-31",
+  km_lr = 20,
+  km_ab = 20,
+  site_name = "swiss",
+  internal = TRUE,
+  progress = FALSE
+)
+```
+
+```{r modis_worchester_processing, echo=FALSE}
+phenology <- phenology |>
+  mutate(
+    value = ifelse(value > 32656, NA, value),
+    value = as.numeric(format(as.Date("1970-01-01") + value, "%j")),
+    value = ifelse (value < 200, value, NA)
+  )
+phenology_raster <- MODISTools::mt_to_terra(
+  phenology,
+  reproject = TRUE
+)
+
+phenology_filtered_2 <- phenology |>
+  dplyr::select(
+    value,
+    calendar_date
+  ) |>
+  mutate(
+    calendar_date = format(as.Date(calendar_date), format = "%Y")
+  ) |>
+  group_by(calendar_date) |>
+  summarize(
+    pheno_mean = mean(value, na.rm=T)
+  )
+
+phenology_filtered$mean_2 <- rep(1, length(phenology_filtered$calendar_date))
+
+for (i in 1:length(phenology_filtered$calendar_date)){
+  phenology_filtered$mean_2[i] = mean(c(phenology_filtered$pheno_mean[i], phenology_filtered_2$pheno_mean[i]))
+}
+
+```
+
+
+```{r statistical_comparison, echo=FALSE}
+t.test(predictions_ha_wo$prediction, phenology_filtered$mean_2)
+# cor(predictions_ha_wo$prediction, phenology_filtered$mean_2) 
+```
+
+
+```{r stats_plots, echo=FALSE, message=FALSE}
+validation <- as.data.frame(cbind(predictions_ha_wo$prediction, phenology_filtered$mean_2))
+
+lm(predictions_ha_wo$prediction ~ phenology_filtered$mean_2)$coeff
+# summary(lm(predictions_ha_wo$prediction ~ phenology_filtered$mean_2))
+
+
+colnames(validation) = c("X", "Y")
+
+ggplot(validation) +
+  geom_smooth(
+    aes(
+      Y,
+      X
+    ),
+    colour = "brown2",
+    method = "lm"
+  ) +
+  geom_point(
+    aes(
+      Y,
+      X
+    )
+  ) +
+  geom_abline(
+    intercept=0, 
+    slope=1, 
+    linetype="dotted"
+  ) +
+  labs(
+    x = "MODIS (DOY)",
+    y = "My Predictions (DOY)",
+    title = "Agreement between predictions and MODIS observations for harvard"
+  ) +
+  theme_bw()  +
+  theme(
+    legend.position = "none"
+  )
+
+v <- as.data.frame(cbind(predictions_ha_wo$prediction, phenology_filtered$mean_2))
+colnames(v) = c("X", "Y")
+v$X[6]=NA
+
+lm(v$X ~ v$Y)$coeff
+# summary(lm(v$X ~ v$Y))
+
+ggplot(v) +
+  geom_smooth(
+    aes(
+      Y,
+      X
+    ),
+    colour = "brown2",
+    method = "lm"
+  ) +
+  geom_point(
+    aes(
+      Y,
+      X
+    )
+  ) +
+  geom_abline(
+    intercept=0, 
+    slope=1, 
+    linetype="dotted"
+  ) +
+  labs(
+    x = "MODIS (DOY)",
+    y = "My Predictions (w/o 2013) (DOY)",
+    title = "Agreement between predictions and MODIS observations for harvard"
+  ) +
+  theme_bw()  +
+  theme(
+    legend.position = "none"
+  )
+```
+
+<br>
+
+#### Spatial comparison of 2010
+
+When comparing the data spatially, we first need to extract a grid of MODIS data for harvard for the year 2010 and crop our modeled data to a similar sized grid. The MODIS data was extracted for a 20 square km grid with the harvard site at its center.
+
+MODIS raster (I don't know why the plot is tilted):
+
+```{r modis_2010, echo=FALSE, message=FALSE}
+phenology <- MODISTools::mt_subset(
+  product = "MCD12Q2",
+  lat = 42.5378,
+  lon = -72.1715,
+  band = "Greenup.Num_Modes_01",
+  start = "2010-01-01",
+  end = "2010-12-31",
+  km_lr = 20,
+  km_ab = 20,
+  site_name = "swiss",
+  internal = TRUE,
+  progress = FALSE
+)
+phenology <- phenology |>
+  mutate(
+    value = ifelse(value > 32656, NA, value),
+    value = as.numeric(format(as.Date("1970-01-01") + value, "%j")),
+    value = ifelse (value < 200, value, NA)
+  )
+phenology_raster <- MODISTools::mt_to_terra(
+  phenology,
+  reproject = TRUE
+)
+
+ggplot() +
+  tidyterra::geom_spatraster(data = phenology_raster) +
+  scale_fill_viridis_c(
+    na.value = NA,
+    name = "DOY"
+    ) +
+  theme_bw()
+```
+
+Predictions from the adjusted model spatially scaled on the same grid:
+
+```{r crop_compare, echo=FALSE, message=FALSE}
+
+# predicted_phenology_ha_wo (my raster)
+# phenology_raster (MODIS raster)
+
+raster_pred_modis <- crop(predicted_phenology_ha_wo,phenology_raster)
+
+# ggplot() +
+#   tidyterra::geom_spatraster(data = predicted_phenology_ha_wo) +
+#   scale_fill_viridis_c(
+#     na.value = NA,
+#     name = "DOY"
+#     ) +
+#   theme_bw()
+# 
+# 
+ggplot() +
+  tidyterra::geom_spatraster(data = raster_pred_modis) +
+  scale_fill_viridis_c(
+    na.value = NA,
+    name = "DOY"
+    ) +
+  theme_bw()
+
+
+pred_resampled <- terra::resample(raster_pred_modis,phenology_raster)
+
+```
+
+Now that both raster have the same extend, I resampled the prediction raster in order to copy the MODIS' raster resolution/geometry. Now both rasters can be compared statistically as matrices. Both datasets fit poorly in a linear regression with a Rsquared of 0.17. Interestingly, the intercept of this linear model is at 80, higher than for the yearly averages. 
+
+
+
+```{r scatterplot, echo=FALSE, message=FALSE}
+
+
+raster_predictions <- raster::as.matrix(pred_resampled)
+raster_modis       <- raster::as.matrix(phenology_raster)
+linmod <- lm(raster_predictions ~ raster_modis)
+
+# summary(linmod)
+
+
+validation <- as.data.frame(cbind(raster_modis, raster_predictions))
+
+colnames(validation) = c("X", "Y")
+
+ggplot(validation) +
+  geom_smooth(
+    aes(
+      X,
+      Y
+    ),
+    colour = "brown2",
+    method = "lm"
+  ) +
+  geom_point(
+    aes(
+      X,
+      Y
+    )
+  ) +
+  xlim(80,110) +
+  ylim(110,125) +
+  geom_abline(
+    intercept=0, 
+    slope=1, 
+    linetype="dotted"
+  ) +
+  labs(
+    x = "MODIS (DOY)",
+    y = "My Predictions (DOY)",
+    title = "Agreement between predictions and MODIS observations for harvard"
+  ) +
+  theme_bw()  +
+  theme(
+    legend.position = "none"
+  )
+
+
+```
+
+<br>
+
+Overall, we saw a poor agreement of the modeled predictions and the observed leaf out dates. This is likely due to 2010 being an extraordinary year in term of temperature. Average temperature was observed to be slightly above average. Important for our predictions, the winter was abnormally cold and spring record warm. (source: [NCEI USA](https://www.ncei.noaa.gov/access/monitoring/monthly-report/national/201013)) This rapid warming influences the warming days we tried to model, leading to possibly wrong conclusions as the system operates in the extremes.  
+
+<br>
+
+
+
+
+
+
+
