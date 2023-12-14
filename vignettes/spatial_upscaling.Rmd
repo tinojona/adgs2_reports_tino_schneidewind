@@ -66,6 +66,8 @@ The advantage of spatial cross-validation is, that it works better with clustere
 #### 2) Do you see an alternative to measuring a distance that considers the task of spatial upscaling based on environmental covariates more directly?
 We could use the distance between environmental covariates respective to their means, for example temperature, radiation and water cycle means. 
 
+<br>
+
 ### **Random Cross Validation**
 #### Use Random Forest to perform a 5-fold cross-validation with the leaf nitrogen data. Report the mean RMSE and R2 across cross-validation folds.
 ```{r random_cv, warning=FALSE, message=FALSE}
@@ -96,11 +98,13 @@ mod <- train(
 print(mod$results[,4:5])
 ```
 
+<br>
+
 ### **Spatial Cross Validation**
 
 #### 1) What do you observe? Discuss the potential implications of the geographical distribution of data points for spatial upscaling.
 We can observe severe clustering of sample sites in Europe and China.We only have very few samples from the US (for North America) and northern South America, and only 2 sample sites in Australia and 1 in Afrika.
-This implicates, that spatial cross validation could be advantageous compared to random cross validation concerning later spatial upscaling. It will perform better when describing Afrika, Australia and Russia, because it will chose variables which focus on a higher quality output for new sites. 
+This implicates, that spatial cross validation could be advantageous compared to random cross validation concerning later spatial upscaling. It will perform better when describing Africa, Australia and Russia, because it will chose variables which focus on a higher quality output for new sites. 
 
 #### 2) Perform a spatial cross-validation. Plot points on a global map, showing the five clusters with distinct colors.
 
@@ -218,6 +222,8 @@ We see relatively  high variance in the R-squared and RMSE between the folds. Th
 This disparity between spatial and random cross validation is likely due to spatial overfitting.
 VERGLEICHEN WIR HIER NICHT ÄPFEL MIT BIRNEN? SPATIAL TESTET EXTRAPOLATION UND RANDOM INTERPOLATION; NATÜRLICH PERFORMED EXTRA SCHECHTER ABER IST DAS EIN INDIKATOR DAFÜR DASS ES HIER AN SICH SCHLECHTER IST?
 
+<br>
+
 ### **Environmental Cross Validation**
 #### 1) Perform a custom cross-validation as above, but this time considering five clusters of points in environmental space - spanned by the mean annual precipitation and the mean annual temperature. Report the R-squared and the RMSE on the validation set of each of the five folds.
 
@@ -316,14 +322,47 @@ Environmental cross validation delivered more even results between folds than sp
 
 
 
+```{r}
 
 
 
+# ludwig discussion
+
+## the task:
+## - was to determine accuracy of upscaling of global scale models
+## - assess the area of applicability
+## - compare different types of cross validation (random/spatial/feature space)
+## - compare different models with different numbers of predictors -> different complexity
+
+## the challenges:
+## - the samples are clustered spatialy -> poor representation of feature space (constraints 
+##   of doing field work geographically/politically/economically/logistically)
+##
+## - different results between the cross validation method:
+##     * in random cross validation we measure the distance between points in the known space
+##       we extrapolate using this distance estimate for points in the space that is unknown to us
+##       -> the challenge is that the distribution of the sample-to-sample and the sample-to-prediction has a delta
+##     * The solution to this delta is spatial cross validation:
+##       
+## the solution: 
+## - the area of applicability is determined by the largest euclidian distance measured in the training data from features
+##   -> we cannot extrapolate larger than this distance outside of the sample space
+## - for the accuracy: we use the realtion between the rsme between all samples and the distance between those.
+##   -> we the use this relation to determine the accuracy of predictions based on the distance.
+##
+## main findings:
+## - from random to spatial cv, the rsme gets worse but the area of applicability get larger
+## - simplified selection of predictors reduces overfitting and removes tendency to fit really 
+##   well for highly localized data combinations
 
 
 
+## in our exercise:
+## we do not scale our data
 
 
+
+```
 
 
 
