@@ -5,6 +5,8 @@ date: "Tino Schneidewind"
 output: html_document
 ---
 
+
+
 ```{r setup, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 rm(list=ls())
@@ -15,7 +17,7 @@ library(hrbrthemes)
 
 ```
 
-```{r library, message=FALSE, warning=FALSE}
+```{r library, message=FALSE, warning=FALSE,}
 library(recipes)
 library(dplyr)
 library(ggplot2)
