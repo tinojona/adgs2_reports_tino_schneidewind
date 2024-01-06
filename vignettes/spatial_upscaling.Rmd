@@ -324,51 +324,6 @@ Environmental cross validation delivered more even results between folds than sp
 
 
 
-```{r}
-
-
-
-# ludwig discussion
-
-## the task:
-## - was to determine accuracy of upscaling of global scale models
-## - assess the area of applicability
-## - compare different types of cross validation (random/spatial/feature space)
-## - compare different models with different numbers of predictors -> different complexity
-
-## the challenges:
-## - the samples are clustered spatialy -> poor representation of feature space (constraints 
-##   of doing field work geographically/politically/economically/logistically)
-##
-## - different results between the cross validation method:
-##     * in random cross validation we measure the distance between points in the known space
-##       we extrapolate using this distance estimate for points in the space that is unknown to us
-##       -> the challenge is that the distribution of the sample-to-sample and the sample-to-prediction has a delta
-##     * The solution to this delta is spatial cross validation:
-##       
-## the solution: 
-## - the area of applicability is determined by the largest euclidian distance measured in the training data from features
-##   -> we cannot extrapolate larger than this distance outside of the sample space
-## - for the accuracy: we use the realtion between the rsme between all samples and the distance between those.
-##   -> we the use this relation to determine the accuracy of predictions based on the distance.
-##
-## main findings:
-## - from random to spatial cv, the rsme gets worse but the area of applicability get larger
-## - simplified selection of predictors reduces overfitting and removes tendency to fit really 
-##   well for highly localized data combinations
-
-
-
-## in our exercise:
-## we do not scale our data
-
-
-
-```
-
-
-
-
 
 
 
