@@ -103,7 +103,7 @@ print(mod$results[,4:5])
 
 <br>
 
-### **Spatial Cross Validation**
+#### **Spatial Cross Validation**
 
 #### 1) What do you observe on the gobal map of observation sites? Discuss the potential implications of the geographical distribution of data points for spatial upscaling.
 We can observe severe clustering of sample sites in Europe and China. There are only very few samples in North and South America, and only 2 sample sites in Australia and 1 in Africa. This leads to poor representation of the global variety in the feature space. As a result, spatial cross validation could be advantageous compared to random cross validation concerning later spatial up scaling to unknown sites. 
@@ -314,7 +314,7 @@ out <- purrr::map2_dfr(
 out
 ```
 
-Environmental spatial-cross validation performed considerably better than regular spacial cross-validation but worse than random cross validation. Also the performance variance between folds in environmental cross-validation was very low compared to spatial cross-validation, even though the fold size was highly variable in environmental cross-validation. In conclusion, environmental predictors are more suitable for clustering than spatial predictors.
+Environmental spatial-cross validation performed considerably better than regular spacial cross-validation but worse than random cross validation. Also the performance variance between folds in environmental cross-validation was very low compared to spatial cross-validation, even though the fold size was highly variable in environmental cross-validation. In conclusion, environmental variables are more suitable for clustering than spatial variables.
 
 <br>
 
