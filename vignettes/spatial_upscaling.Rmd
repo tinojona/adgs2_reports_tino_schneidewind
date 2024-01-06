@@ -1,6 +1,6 @@
 ---
 title: "Exercise: Spatial Upscaling"
-author: "Applied Geodata Science 2 (2023)"
+author: "Applied Geodata Science 2 (HS 2023)"
 date: "Tino Schneidewind"
 output: html_document
 ---
@@ -18,6 +18,8 @@ library(hrbrthemes)
 ```
 
 ```{r library, message=FALSE, warning=FALSE,}
+# Libraries
+
 library(recipes)
 library(dplyr)
 library(ggplot2)
@@ -33,7 +35,9 @@ library(gridExtra)
 
 
 
-```{r data, echo=FALSE, message=FALSE}
+```{r data, message=FALSE}
+# Load Data
+
 df <- readr::read_csv("https://raw.githubusercontent.com/stineb/leafnp_data/main/data/leafnp_tian_et_al.csv")
 
 common_species <- df |> # get species names
@@ -47,22 +51,19 @@ dfs <- df |>   # select only needed variables
   dplyr::select(leafN, lon, lat, elv, mat, map, ndep, mai, Species) |> 
   filter(Species %in% common_species)
 
-set.seed(06122023)
+set.seed(06122023) # for reproducibility
 ```
 
-### **Ludwig et al.**
+<br>
+
+#### **Ludwig et al.**
 #### 1) Explain the difference between a random cross-validation and a spatial cross-validation.
 
 There are differences in the variable selection in both methods.
 Random cross validation is able to reproduce clustered data well,
-but might not be suitable for spatial scaling due to:
+but might not be suitable for spatial scaling due to a strong clustering of the reference data and issues with quality control for the spatial predictions. Consequently it is hard to quality check predictions at a new sample site.
 
-(1) a strong clustering of the reference data, 
-(2) issues with quality control for the spatial predictions.
-
-(3) Consequently it is hard to quality check predictions at a new sample site.
-
-The advantage of spatial cross-validation is, that it works better with clustered reference data because it focuses on choosing variables that improve the predictability of new areas.
+The advantage of spatial cross-validation is, that it works better with clustered reference data because it focuses on choosing variables that improve the predictability of new areas. In random cross validation, we measure the distance between point and use this distance to estimate points in the space that is known to us. Spatial cross-validation serves as a solution for the delta between the sample-to-sample distribution and the sample-to-prediction distribution. Spatial cross validation performed worse than random cross validation, but had a larger area of applicability. 
 
 
 #### 2) Do you see an alternative to measuring a distance that considers the task of spatial upscaling based on environmental covariates more directly?
@@ -70,7 +71,7 @@ We could use the distance between environmental covariates respective to their m
 
 <br>
 
-### **Random Cross Validation**
+#### **Random Cross Validation**
 #### Use Random Forest to perform a 5-fold cross-validation with the leaf nitrogen data. Report the mean RMSE and R2 across cross-validation folds.
 ```{r random_cv, warning=FALSE, message=FALSE}
 # model formulation
@@ -104,9 +105,8 @@ print(mod$results[,4:5])
 
 ### **Spatial Cross Validation**
 
-#### 1) What do you observe? Discuss the potential implications of the geographical distribution of data points for spatial upscaling.
-We can observe severe clustering of sample sites in Europe and China.We only have very few samples from the US (for North America) and northern South America, and only 2 sample sites in Australia and 1 in Afrika.
-This implicates, that spatial cross validation could be advantageous compared to random cross validation concerning later spatial upscaling. It will perform better when describing Africa, Australia and Russia, because it will chose variables which focus on a higher quality output for new sites. 
+#### 1) What do you observe on the gobal map of observation sites? Discuss the potential implications of the geographical distribution of data points for spatial upscaling.
+We can observe severe clustering of sample sites in Europe and China. There are only very few samples in North and South America, and only 2 sample sites in Australia and 1 in Africa. This leads to poor representation of the global variety in the feature space. As a result, spatial cross validation could be advantageous compared to random cross validation concerning later spatial up scaling to unknown sites. 
 
 #### 2) Perform a spatial cross-validation. Plot points on a global map, showing the five clusters with distinct colors.
 
@@ -165,7 +165,7 @@ plot1 <- dfs |>
 plot2 <- dfs |>
   ggplot(aes(x=leafN)) +
   geom_histogram(fill = "brown1", color = "black") +
-  facet_wrap(~clust) +
+  facet_wrap(clust ~ .) +
   theme_ipsum()
 
 grid.arrange(plot1, plot2, ncol = 2) 
@@ -220,13 +220,12 @@ out
 ```
 
 #### 5) Compare the results of the spatial cross-validation to the results of the random cross-validation and discuss reasons for why you observe a difference in the cross-validation metrics.
-We see relatively  high variance in the R-squared and RMSE between the folds. This correlates with the number leaf nitrogen observation in each cluster. Compared to random cross validation, spatial cross validation performed worse over all folds. Especially, this is the case for the folds 1 and 2 with large RSME and very small R-squared and few data points. 
-This disparity between spatial and random cross validation is likely due to spatial overfitting.
-VERGLEICHEN WIR HIER NICHT ÄPFEL MIT BIRNEN? SPATIAL TESTET EXTRAPOLATION UND RANDOM INTERPOLATION; NATÜRLICH PERFORMED EXTRA SCHECHTER ABER IST DAS EIN INDIKATOR DAFÜR DASS ES HIER AN SICH SCHLECHTER IST?
+
+Spatial cross-validation performed significantly worse than random cross-validation, with considerable differences between folds. Visually, these differences in RSME and R2 in spatial cross-validation correspond to variance in the fold size distribution. Fold 3 has the highest count and also the lowest RSME and highest R2. Fold 2 has by far the lowest count and also the highest RSME and lowest R2. The smaller the training data, the weaker the predictability performance. As observed in Ludwig et al. (2023), random cross-validation outperforms spatial cross-validation, however, we did not investigate the difference in area of applicability, where the advantages of spatial cross-validation lie. 
 
 <br>
 
-### **Environmental Cross Validation**
+#### **Environmental Cross Validation**
 #### 1) Perform a custom cross-validation as above, but this time considering five clusters of points in environmental space - spanned by the mean annual precipitation and the mean annual temperature. Report the R-squared and the RMSE on the validation set of each of the five folds.
 
 ```{r kmeans_environmental,  message=FALSE, warning=FALSE}
@@ -314,6 +313,7 @@ out <- purrr::map2_dfr(
   mutate(test_fold = 1:5)
 out
 ```
+
 Environmental cross validation delivered more even results between folds than spatial crossvalidation, even though fold 2 and 5 especially had very few observations. On average, environmental cv performed better than spatial cv. This implies that environmental clustering is more appropriate for spatial upscaling of an environmental model output than spatial clustering. Both methods however delivered inferior results compared to random cross validation, possibly leaf nitrogen does not differ enough between sites or is not depicted well enough through yearly averages, leading to poorer performance when we focus on such. 
 
 <br>
