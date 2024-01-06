@@ -2,7 +2,9 @@
 title: "Exercise: Spatial Upscaling"
 author: "Applied Geodata Science 2 (HS 2023)"
 date: "Tino Schneidewind"
-output: html_document
+output: 
+  html_document:
+    code_folding: show
 ---
 
 

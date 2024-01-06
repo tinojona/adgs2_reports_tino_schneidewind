@@ -2,7 +2,9 @@
 title: "Exercise: Phenology Modelling"
 author: "Applied Geodata Science 2 (2023)"
 date: "Tino Schneidewind"
-output: html_document
+output: 
+  html_document:
+    code_folding: show
 ---
 
 ```{r setup, include=FALSE}
@@ -11,6 +13,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r library, message=FALSE, warning=FALSE}
+# Libraries
+
 library(phenocamr)
 library(geodata)
 library(terra)
@@ -28,15 +32,16 @@ library(tidyterra)
 ```
 
 
-### A short introduction:
+#### **Introduction**
 
 Phenology is influenced by seasonal and interannual variability in climate. In the age of climate change, we observe changes in biological life cycles with consequences for ecosystem stability and diversity. 
 In this exercise, we modeled the growing degree days (GDD), which describe the temperature accumulation in spring until leaf unfolding. For this, we worked through ["Handful of Pixels" chapter 6](https://geco-bern.github.io/handfull_of_pixels/phenology_modelling.html).
 
-As data, we used PhenoCam data, which we accessed using the [{phenocamr}](https://bluegreen-labs.github.io/phenocamr/) [R package](https://bluegreen-labs.github.io/phenocamr/). We chose the site "harvard" in north eastern USA. The data was downloaded according to chapter 6.2. The used model for GDD and the model optimisation method is described in chapter 6.2. After optimising the model, we have values for the **temperature threshold (2.811523)** and the **number of accumulation days (228.27844)**.
+As data, we used PhenoCam data, which we accessed using the [{phenocamr}](https://bluegreen-labs.github.io/phenocamr/) [R package](https://bluegreen-labs.github.io/phenocamr/). We chose the site "harvard" in north eastern USA. The data was downloaded according to chapter 6.2. The used model for GDD and the model optimization method is described in chapter 6.2. After optimizing the model, we have values for the **temperature threshold (2.811523)** and the **number of accumulation days (228.27844)**. Using these values, we were able to predict the growing degree days from 2008-2022 as follows.
 
 
 ```{r harvard_data, echo=FALSE, message=FALSE}
+# Load data
 phenocamr::download_phenocam(
   site = "harvard$",
   veg_type = "DB",
@@ -54,7 +59,8 @@ harvard_phenocam_data <- readr::read_csv(
 ```
 
 
-```{r harvard_processing, echo=FALSE, message=FALSE}
+```{r harvard_processing, message=FALSE}
+# Data processing
 harvard_phenology <- readr::read_csv(
   file.path(
     tempdir(),
@@ -126,7 +132,8 @@ harvard_phenology <- harvard_phenology |>
   )
 ```
 
-```{r models, echo=FALSE}
+```{r models}
+# Load model function
 source("../functions/phenology_models.R")
 ```
 
@@ -208,7 +215,8 @@ The model and the observed leaf out days had visually had a similar tendency, ho
 
 We scaled the model spatially for the year 2010 to compare it later on.
 
-```{r harvard_spatial, echo=FALSE, message=FALSE, results="hide"}
+```{r harvard_spatial, message=FALSE, results="hide"}
+# model application for 2010
 prediction_harvard_10 <- harvard_temp |>
   dplyr::filter(
     year == 2010
@@ -220,7 +228,10 @@ prediction_harvard_10 <- harvard_temp |>
       par = optim_par_harvard
       )  
   )
+```
 
+
+```{r harvard_spatial_new, message=FALSE, results="hide"}
 # Download daily data
 daymetr::download_daymet_tiles(
   tiles = 11935,
@@ -288,8 +299,8 @@ leaflet() |>
 <br>
 
 
-### Exercises
-#### Model Optimization
+#### **Exercises**
+#### **1. Model Optimization**
 *Task: How can you improve the model used to regionally scale the results in Chapter 6? Provide at least three ways to improve the model used. Implement at least one of these methods.*
 
 Multiple methods are possible to modify the used model. 
@@ -306,10 +317,11 @@ Multiple methods are possible to modify the used model.
 
 
 
-#### 1. Implementation of Optimization
+#### **2. Implementation of Optimization**
 In order to ensure some comparibility between the new site and the harvard site, I chose a site nearby. The **worchester** site (lat: 42.2697, lon: -71.8428) is approximately 40 km southeast of the harvard site. Compared to harvard (340 m above sea level), worchester has less elevation (185 m above sea level). This site is also part of the PhenCam network. Both datasets were given an ID, so that we are able to distinguish between the two sites in the modeling process.  
 
-```{r worchester, echo=FALSE, message=FALSE}
+```{r worchester, message=FALSE}
+# Load data for worcester
 phenocamr::download_phenocam(
   site = "worcester",
   veg_type = "DB",
@@ -327,7 +339,8 @@ worcester_phenocam_data <- readr::read_csv(
 ```
 
 
-```{r worchester_processing, echo=FALSE, message=FALSE}
+```{r worchester_processing, message=FALSE}
+# Data processing worcester
 worcester_phenology <- readr::read_csv(
   file.path(
     tempdir(),
@@ -406,11 +419,12 @@ harvard_phenology$ID <- "harvard"
 ```
 
 ```{r optimizationdoubble, message=FALSE}
+# Data merging
 data_ha_wo <- list(
   drivers = rbind(worcester_temp, harvard_temp),
   validation = rbind(worcester_phenology, harvard_phenology))
 
-# model optimisation on new data
+# model optimization on new data
 optim_par_ha_wo = GenSA::GenSA(
   par = par,
   fn = rmse_gdd,
@@ -534,7 +548,7 @@ leaflet() |>
 
 
 
-#### 2. Statistical Comparison to MODIS Data 
+#### **3. Statistical Comparison to MODIS Data** 
 *Task: Statistically compare the results with the MODIS MCD12Q2 phenology product: compare the data spatially, describe why you might or might not see the same patterns, consider that 2010 was a ‘special’ year for the north east of the US.*
 
 In order to compare our results from the modified model with the MODIS MCD12Q2 phenology product, we needed to download it first. First, I downloaded the data from MODIS for the harvard site, and spatially averaged the yearly leaf out dates of the 20km^2 raster to get values, that can be compared to our predicted values. 
@@ -560,7 +574,8 @@ phenology <- MODISTools::mt_subset(
 )
 ```
 
-```{r modis_harvard_processing, echo=FALSE}
+```{r modis_harvard_processing}
+# Data processing
 phenology <- phenology |>
   mutate(
     value = ifelse(value > 32656, NA, value),
@@ -606,7 +621,8 @@ phenology <- MODISTools::mt_subset(
 )
 ```
 
-```{r modis_worchester_processing, echo=FALSE}
+```{r modis_worchester_processing}
+# Data processing for worcester
 phenology <- phenology |>
   mutate(
     value = ifelse(value > 32656, NA, value),
@@ -633,6 +649,7 @@ phenology_filtered_2 <- phenology |>
 
 phenology_filtered$mean_2 <- rep(1, length(phenology_filtered$calendar_date))
 
+# averaging between both data sets
 for (i in 1:length(phenology_filtered$calendar_date)){
   phenology_filtered$mean_2[i] = mean(c(phenology_filtered$pheno_mean[i], phenology_filtered_2$pheno_mean[i]))
 }
@@ -724,7 +741,7 @@ ggplot(v) +
 
 <br>
 
-#### Spatial comparison of 2010
+#### **4. Spatial comparison of 2010**
 
 When comparing the data spatially, we first need to extract a grid of MODIS data for harvard for the year 2010 and crop our modeled data to a similar sized grid. The MODIS data was extracted for a 20 square km grid with the harvard site at its center.
 
