@@ -31,7 +31,7 @@ library(leaflet)
 library(tidyterra)
 ```
 
-
+<br>
 #### **Introduction**
 
 Phenology is influenced by seasonal and interannual variability in climate. In the age of climate change, we observe changes in biological life cycles with consequences for ecosystem stability and diversity. 
