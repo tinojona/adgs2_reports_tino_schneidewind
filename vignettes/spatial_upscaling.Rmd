@@ -314,7 +314,7 @@ out <- purrr::map2_dfr(
 out
 ```
 
-Environmental cross validation delivered more even results between folds than spatial crossvalidation, even though fold 2 and 5 especially had very few observations. On average, environmental cv performed better than spatial cv. This implies that environmental clustering is more appropriate for spatial upscaling of an environmental model output than spatial clustering. Both methods however delivered inferior results compared to random cross validation, possibly leaf nitrogen does not differ enough between sites or is not depicted well enough through yearly averages, leading to poorer performance when we focus on such. 
+Environmental spatial-cross validation performed considerably better than regular spacial cross-validation but worse than random cross validation. Also the performance variance between folds in environmental cross-validation was very low compared to spatial cross-validation, even though the fold size was highly variable in environmental cross-validation. In conclusion, environmental predictors are more suitable for clustering than spatial predictors.
 
 <br>
 
