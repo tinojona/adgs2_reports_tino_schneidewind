@@ -1,45 +1,29 @@
 ---
-title: "Exercise: Spatial Upscaling"
-author: "Applied Geodata Science 2 (HS 2023)"
-date: "Tino Schneidewind"
-output: 
-  html_document:
-    code_folding: show
+title: "Report Exercise: Spatial Upscaling"
+author: "Tino Schneidewind"
+output: html_document
 ---
 
 
 
-```{r setup, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+```{r setup, message=FALSE, warning=FALSE, echo=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 rm(list=ls())
-library(raster)
-library(leaflet)
-library(sf)
-library(hrbrthemes)
-
 ```
 
-```{r library, message=FALSE, warning=FALSE,}
+```{r library, message=FALSE, warning=FALSE}
 # Libraries
+library(recipes);library(dplyr);library(ggplot2);library(tidyterra);library(ranger)
+library(lattice);library(caret);library(rnaturalearth);library(rnaturalearthdata)
+library(viridis);library(gridExtra);library(hrbrthemes)
+# library(raster);library(leaflet);library(sf);
 
-library(recipes)
-library(dplyr)
-library(ggplot2)
-library(tidyterra)
-library(ranger)
-library(lattice)
-library(caret)
-library(rnaturalearth)
-library(rnaturalearthdata)
-library(viridis)
-library(gridExtra) 
 ```
 
 
 
 ```{r data, message=FALSE}
 # Load Data
-
 df <- readr::read_csv("https://raw.githubusercontent.com/stineb/leafnp_data/main/data/leafnp_tian_et_al.csv")
 
 common_species <- df |> # get species names
@@ -58,7 +42,8 @@ set.seed(06122023) # for reproducibility
 
 <br>
 
-#### **Ludwig et al.**
+### **Ludwig et al.**
+
 #### 1) Explain the difference between a random cross-validation and a spatial cross-validation.
 
 There are differences in the variable selection in both methods.
@@ -73,7 +58,8 @@ We could use the distance between environmental covariates respective to their m
 
 <br>
 
-#### **Random Cross Validation**
+### **Random Cross Validation**
+
 #### Use Random Forest to perform a 5-fold cross-validation with the leaf nitrogen data. Report the mean RMSE and R2 across cross-validation folds.
 ```{r random_cv, warning=FALSE, message=FALSE}
 # model formulation
@@ -105,7 +91,7 @@ print(mod$results[,4:5])
 
 <br>
 
-#### **Spatial Cross Validation**
+### **Spatial Cross Validation**
 
 #### 1) What do you observe on the gobal map of observation sites? Discuss the potential implications of the geographical distribution of data points for spatial upscaling.
 We can observe severe clustering of sample sites in Europe and China. There are only very few samples in North and South America, and only 2 sample sites in Australia and 1 in Africa. This leads to poor representation of the global variety in the feature space. As a result, spatial cross validation could be advantageous compared to random cross validation concerning later spatial up scaling to unknown sites. 
@@ -115,13 +101,10 @@ We can observe severe clustering of sample sites in Europe and China. There are 
 To control the randomness of my analysis, I used set.seed(06122023). This ensures repeatable model results and consistency in my conclusions.
 ```{r k_means_spatial, message=FALSE, warning=FALSE}
 # cluster the data by column lat and lon
-dfs$clust <- as.factor(kmeans(
-  dfs[,2:3],
-  centers = 5
-)$cluster)
-
+dfs$clust <- as.factor(kmeans(dfs[,2:3], centers = 5)$cluster)
 ```
-```{r spatial_cv, echo=FALSE, message=FALSE, warning=FALSE}
+
+```{r spatial_cv, echo=FALSE, message=FALSE, warning=FALSE, fig.width=7, fig.height=4, fig.align='center'}
 coast <- rnaturalearth::ne_coastline(scale = 110, returnclass = "sf")
 
 # colors for plot
@@ -144,12 +127,14 @@ ggplot() +
   scale_color_manual(values=my_colors) +
   labs(x = "", y = "") +
   theme(legend.position = "bottom") +
-  labs(title="Modelinput: lon+lat")
+  labs(title="Modelinput: lon+lat") +
+  theme_classic()
 
 ```
 
 #### 3) Plot the distribution of leaf N by cluster.
-```{r plot_leaf_distribution_spatial, echo=FALSE, message=FALSE, warning=FALSE}
+
+```{r plot_leaf_distribution_spatial, echo=FALSE, message=FALSE, warning=FALSE, fig.width=11, fig.height=4, fig.align='center'}
 plot1 <- dfs |>
   ggplot( aes(x=clust, y=leafN, fill=clust)) +
   geom_boxplot() +
@@ -174,13 +159,14 @@ grid.arrange(plot1, plot2, ncol = 2)
 ```
 
 #### 4) Split your data into five folds that correspond to the geographical clusters identified by in (2.), and fit a random forest model performing a 5-fold cross-validation with the clusters as folds. Report the RMSE and the R2 determined on each of the five folds.
-```{r randomforest_spatial, message=FALSE}
+
+```{r randomforest_spatial, message=FALSE, warning=FALSE}
 # training folds from kmeans clusters
 group_folds_train <- purrr::map(
   seq(length(unique(dfs$clust))),
   ~ {
     dfs |> 
-      select(clust) |> 
+      dplyr::select(clust) |> 
       mutate(idx = 1:n()) |> 
       filter(clust != .) |> 
       pull(idx)})
@@ -190,7 +176,7 @@ group_folds_test <- purrr::map(
   seq(length(unique(dfs$clust))),
   ~ {
     dfs |> 
-      select(clust) |> 
+      dplyr::select(clust) |> 
       mutate(idx = 1:n()) |> 
       filter(clust == .) |> 
       pull(idx)})
@@ -227,20 +213,18 @@ Spatial cross-validation performed significantly worse than random cross-validat
 
 <br>
 
-#### **Environmental Cross Validation**
+### **Environmental Cross Validation**
+
 #### 1) Perform a custom cross-validation as above, but this time considering five clusters of points in environmental space - spanned by the mean annual precipitation and the mean annual temperature. Report the R-squared and the RMSE on the validation set of each of the five folds.
 
 ```{r kmeans_environmental,  message=FALSE, warning=FALSE}
 # cluster the data by column mat and map
-dfs$clust_env <- as.factor(kmeans(
-  dfs[,5:6],
-  centers = 5
-)$cluster)
+dfs$clust_env <- as.factor(kmeans(dfs[,5:6], centers = 5)$cluster)
 
 ```
 
 
-```{r env_cvs, echo=FALSE, message=FALSE, warning=FALSE}
+```{r env_cvs, echo=FALSE, message=FALSE, warning=FALSE, warning=FALSE, fig.width=7, fig.height=4, fig.align='center'}
 # plot world map cluster distribution on mat+map
 ggplot() +
   # plot coastline
@@ -258,9 +242,12 @@ ggplot() +
   scale_color_manual(values=my_colors) +
   labs(x = "", y = "") +
   theme(legend.position = "bottom") +
-  labs(title="Modelinput: mat+map")
+  labs(title="Modelinput: mat+map") +
+  theme_classic()
+```
 
 
+```{r env_cvs2, echo=FALSE, message=FALSE, warning=FALSE, warning=FALSE,  fig.width=11, fig.height=4, fig.align='center'}
 ## Plot the distribution of leaf N by cluster.
 plot3 <- dfs %>%
   ggplot( aes(x=clust_env, y=leafN, fill=clust_env)) +
@@ -291,7 +278,7 @@ group_folds_train <- purrr::map(
   seq(length(unique(dfs$clust))),
   ~ {
     dfs |> 
-      select(clust_env) |> 
+      dplyr::select(clust_env) |> 
       mutate(idx = 1:n()) |> 
       filter(clust_env != .) |> 
       pull(idx)})
@@ -301,7 +288,7 @@ group_folds_test <- purrr::map(
   seq(length(unique(dfs$clust))),
   ~ {
     dfs |> 
-      select(clust_env) |> 
+      dplyr::select(clust_env) |> 
       mutate(idx = 1:n()) |> 
       filter(clust_env == .) |> 
       pull(idx)})

@@ -1,7 +1,6 @@
 ---
-title: "Exercise: Phenology Modelling"
-author: "Applied Geodata Science 2 (2023)"
-date: "Tino Schneidewind"
+title: "Report Exercise: Phenology Modelling"
+author: "Tino Schneidewind"
 output: 
   html_document:
     code_folding: show
@@ -9,31 +8,19 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-
+rm(list=ls())
 ```
 
 ```{r library, message=FALSE, warning=FALSE}
 # Libraries
-
-library(phenocamr)
-library(geodata)
-library(terra)
-library(dplyr)
-library(here)
-library(ggplot2)
-library(patchwork)
-library(GenSA)
-library(BayesianTools)
-library(daymetr)
-library(raster)
-library(MODISTools)
-library(leaflet)
-library(tidyterra)
+library(phenocamr);library(geodata);library(terra);library(dplyr);library(here)
+library(ggplot2);library(patchwork);library(GenSA);library(BayesianTools)
+library(daymetr);library(raster);library(MODISTools);library(leaflet);library(tidyterra)
 ```
 
 <br>
 
-#### **Introduction**
+### **Introduction**
 
 Phenology is influenced by seasonal and interannual variability in climate. In the age of climate change, we observe changes in biological life cycles with consequences for ecosystem stability and diversity. 
 In this exercise, we modeled the growing degree days (GDD), which describe the temperature accumulation in spring until leaf unfolding. For this, we worked through ["Handful of Pixels" chapter 6](https://geco-bern.github.io/handfull_of_pixels/phenology_modelling.html).
@@ -50,13 +37,11 @@ phenocamr::download_phenocam(
   daymet = TRUE,
   phenophase = TRUE,
   trim = 2022,
-  out_dir = tempdir()
-)
+  out_dir = tempdir())
 
 harvard_phenocam_data <- readr::read_csv(
   file.path(tempdir(), "harvard_DB_1000_3day.csv"), 
-  comment = "#"
-)
+  comment = "#")
 ```
 
 
@@ -67,70 +52,38 @@ harvard_phenology <- readr::read_csv(
     tempdir(),
     "harvard_DB_1000_3day_transition_dates.csv"
     ),
-  comment = "#"
-) |>
+  comment = "#") |>
+  
   dplyr::filter(
     direction == "rising",
-    gcc_value == "gcc_90"
-  )
-
-harvard_temp <- harvard_phenocam_data |>
-  group_by(year) |>
-  dplyr::mutate(
-    tmean = (tmax..deg.c. + tmin..deg.c.)/2
-  ) |> 
-  dplyr::mutate(
-    date = as.Date(date),
-    gdd = cumsum(ifelse(tmean >= 5, tmean - 5, 0))
-  ) |>
-  dplyr::select(
-    date,
-    year,
-    tmean,
-    gdd
-  ) |>
-  ungroup()
-
-harvard_phenology <- harvard_phenology |>
+    gcc_value == "gcc_90"  )|>
   mutate(
     doy = as.numeric(format(as.Date(transition_25),"%j")),
-    year = as.numeric(format(as.Date(transition_25),"%Y"))
-  ) |>
+    year = as.numeric(format(as.Date(transition_25),"%Y"))) |>
+  
   dplyr::select(
     year,
     doy,
     transition_25,
-    threshold_25
-  )
+    threshold_25)
+
 
 harvard_temp <- harvard_phenocam_data |>
   group_by(year) |>
   dplyr::mutate(
-    tmean = (tmax..deg.c. + tmin..deg.c.)/2
-  ) |> 
+    tmean = (tmax..deg.c. + tmin..deg.c.)/2) |>
+
   dplyr::mutate(
     date = as.Date(date),
-    gdd = cumsum(ifelse(tmean >= 5, tmean - 5, 0))
-  ) |>
+    gdd = cumsum(ifelse(tmean >= 5, tmean - 5, 0))) |>
+
   dplyr::select(
     date,
     year,
     tmean,
-    gdd
-  ) |>
+    gdd) |>
   ungroup()
 
-harvard_phenology <- harvard_phenology |>
-  mutate(
-    doy = as.numeric(format(as.Date(transition_25),"%j")),
-    year = as.numeric(format(as.Date(transition_25),"%Y"))
-  ) |>
-  dplyr::select(
-    year,
-    doy,
-    transition_25,
-    threshold_25
-  )
 ```
 
 ```{r models}
@@ -166,14 +119,15 @@ predictions_harvard <- harvard_temp |>
   summarize(
     prediction = gdd_model(
       temp = tmean,
-      par = optim_par_harvard))
+      par = optim_par_harvard)) |>
+  drop_na()
 
 print(predictions_harvard)
 lm(predictions_harvard$prediction ~ harvard_phenology$doy)$coeff
 ```
 
 The modeled leaf unfolding days (DOY) compared to the measured ones look like this:
-```{r modell_all_years, echo=FALSE}
+```{r modell_all_years, echo=FALSE, warning=FALSE, message=FALSE, fig.align='center', fig.width=6, fig.height=4}
 
 # summary(lm(predictions_harvard$prediction ~ harvard_phenology$doy))
 # join predicted with observed data
@@ -270,7 +224,7 @@ predicted_phenology_harvard <- terra::app(
 )
 ```
 
-```{r scale harvard, echo=FALSE, message=FALSE}
+```{r scale harvard, echo=FALSE, message=FALSE, fig.align='center'}
 pal <- colorNumeric(
   "magma",
   values(predicted_phenology_harvard),
@@ -300,7 +254,8 @@ leaflet() |>
 <br>
 
 
-#### **Exercises**
+### **Exercises**
+
 #### **1. Model Optimization**
 *Task: How can you improve the model used to regionally scale the results in Chapter 6? Provide at least three ways to improve the model used. Implement at least one of these methods.*
 
@@ -372,7 +327,7 @@ worcester_temp <- worcester_phenocam_data |>
   ungroup()
 
 worcester_phenology <- worcester_phenology |>
-  mutate(
+  dplyr::mutate(
     doy = as.numeric(format(as.Date(transition_25),"%j")),
     year = as.numeric(format(as.Date(transition_25),"%Y"))
   ) |>
@@ -401,11 +356,11 @@ worcester_temp <- worcester_phenocam_data |>
   ungroup()
 
 worcester_phenology <- worcester_phenology |>
-  mutate(
+  dplyr::mutate(
     doy = as.numeric(format(as.Date(transition_25),"%j")),
     year = as.numeric(format(as.Date(transition_25),"%Y"))
   ) |>
-  select(
+  dplyr::select(
     year,
     doy,
     transition_25,
@@ -443,7 +398,8 @@ predictions_ha_wo <- rbind(worcester_temp, harvard_temp) |>
   summarize(
     prediction = gdd_model(
       temp = tmean,
-      par = optim_par_ha_wo))
+      par = optim_par_ha_wo)) |>
+  drop_na()
 
 print(predictions_ha_wo)
 lm(predictions_ha_wo$prediction ~ harvard_phenology$doy)$coeff
@@ -453,7 +409,7 @@ When using both datasets as input, the optimization routine returned different o
 
 In this plot you can see, that my improved model has pretty good alignement with the validation data. However, there is the clear outlier, which was predicted in 2013. This outlier did not appear before we adjusted the model by adding the worchester data. The slope of the linear model improved up to 0.82. However, Rquared is now only 0.1 and p = 0.23. 
 
-```{r modworchester, echo=FALSE, warning=FALSE}
+```{r modworchester, echo=FALSE, warning=FALSE, fig.align='center', fig.width=6, fig.height=4}
 
 validation <- left_join(predictions_ha_wo, harvard_phenology)
 
@@ -510,7 +466,7 @@ predicted_phenology_ha_wo <- terra::app(
   par = optim_par_ha_wo)
 ```
 
-```{r scale harvard_wor, echo=FALSE, message=FALSE, warning=FALSE}
+```{r scale harvard_wor, echo=FALSE, message=FALSE, warning=FALSE, fig.align='center'}
 pal <- colorNumeric(
   "magma",
   values(predicted_phenology_ha_wo),
@@ -591,7 +547,7 @@ phenology_filtered <- phenology |>
     value,
     calendar_date
   ) |>
-  mutate(
+  dplyr::mutate(
     calendar_date = format(as.Date(calendar_date), format = "%Y")
   ) |>
   group_by(calendar_date) |>
@@ -638,7 +594,7 @@ phenology_filtered_2 <- phenology |>
     value,
     calendar_date
   ) |>
-  mutate(
+  dplyr::mutate(
     calendar_date = format(as.Date(calendar_date), format = "%Y")
   ) |>
   group_by(calendar_date) |>
@@ -661,7 +617,7 @@ t.test(predictions_ha_wo$prediction, phenology_filtered$mean_2)
 ```
 
 
-```{r stats_plots, echo=FALSE, message=FALSE, warning=FALSE}
+```{r stats_plots, echo=FALSE, message=FALSE, warning=FALSE, fig.height=4, fig.width=6, fig.align='center'}
 validation <- as.data.frame(cbind(predictions_ha_wo$prediction, phenology_filtered$mean_2))
 
 lm(predictions_ha_wo$prediction ~ phenology_filtered$mean_2)$coeff
@@ -706,7 +662,10 @@ v$X[6]=NA
 
 lm(v$X ~ v$Y)$coeff
 # summary(lm(v$X ~ v$Y))
+```
 
+
+```{r stats_plots2, echo=FALSE, message=FALSE, warning=FALSE, fig.height=4, fig.width=6, fig.align='center'}
 ggplot(v) +
   geom_smooth(
     aes(
@@ -744,7 +703,7 @@ ggplot(v) +
 
 When comparing the data spatially, we first need to extract a grid of MODIS data for harvard for the year 2010 and crop our modeled data to a similar sized grid. The MODIS data was extracted for a 20 square km grid with the harvard site at its center.
 
-```{r modis_2010, message=FALSE, warning=FALSE}
+```{r modis_2010, message=FALSE, warning=FALSE, fig.width=8, fig.height=4, fig.align='center'}
 # load Modis data for harvard 2010
 phenology <- MODISTools::mt_subset(
   product = "MCD12Q2",
@@ -801,7 +760,7 @@ Now that both raster have the same extend, I resampled the prediction raster in 
 
 
 
-```{r scatterplot, echo=FALSE, message=FALSE, warning=FALSE}
+```{r scatterplot, echo=FALSE, message=FALSE, warning=FALSE, fig.width=6, fig.height=4, fig.align='center'}
 
 
 raster_predictions <- raster::as.matrix(pred_resampled)
