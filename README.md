@@ -1,7 +1,6 @@
 # Applied Geodata Science II
 
-This repository was created using a github template from geco-bern and serves as a platform 
-to submit my reports on `Phenology Modelling` and `Spatial Upscaling` in the form of R-Markdown documents.
+This repository serves as a platform to work though the course [*Applied Geodata Science II*](https://geco-bern.github.io/agds2_course/) and to submit my reports on `Phenology Modelling` and `Spatial Upscaling` in the form of R-Markdown documents.
 
 ## Folders
 
