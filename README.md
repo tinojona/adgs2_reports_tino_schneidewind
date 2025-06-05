@@ -1,6 +1,6 @@
 # Applied Geodata Science II
 
-This repository serves as a platform to work though the course [*Applied Geodata Science II*](https://geco-bern.github.io/agds2_course/) using the [Workbook: a Handful of Pixels](https://geco-bern.github.io/handfull_of_pixels/) to submit my reports on `Phenology Modelling` and `Spatial Upscaling` in the form of R-Markdown documents.
+This repository serves as a platform to work though the course [Applied Geodata Science II](https://geco-bern.github.io/agds2_course/) using the [Workbook: a Handful of Pixels](https://geco-bern.github.io/handfull_of_pixels/) to submit my reports on `Phenology Modelling` and `Spatial Upscaling` in the form of R-Markdown documents.
 
 ## Folders
 
